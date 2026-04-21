@@ -22,6 +22,7 @@ export type ViewKey =
   | "executor"
   | "triggers"
   | "integration"
+  | "settings"
 
 type Props = {
   active: ViewKey
@@ -36,6 +37,7 @@ const navItems: { key: ViewKey; label: string; icon: React.ElementType; badge?: 
   { key: "executor", label: "Exécuteur Lua", icon: Terminal },
   { key: "triggers", label: "Triggers", icon: Zap, badge: "Nouveau" },
   { key: "integration", label: "Intégration Roblox", icon: FileCode, badge: "Script" },
+  { key: "settings", label: "Paramètres", icon: Settings, badge: "Custom" },
 ]
 
 export function SkydriveSidebar({ active, onChange }: Props) {
@@ -103,10 +105,6 @@ export function SkydriveSidebar({ active, onChange }: Props) {
       {/* Footer */}
       <div className="mt-auto flex flex-col gap-1">
         <div className="h-px bg-white/5 my-3" />
-        <button className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors">
-          <Settings className="h-4 w-4" />
-          Paramètres
-        </button>
         <button className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors">
           <LifeBuoy className="h-4 w-4" />
           Support

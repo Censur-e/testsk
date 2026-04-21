@@ -103,6 +103,8 @@ export type CommandKind =
   | "kick_all"
   | "server_shutdown"
   | "server_restart"
+  // Commande personnalisee (definie dans les parametres)
+  | "custom"
 
 export type Command = {
   id: string
@@ -150,6 +152,41 @@ export type EconomyEntry = {
   balance: number
   totalEarned: number
   totalSpent: number
+  updatedAt: number
+}
+
+// ============ COMMANDES PERSONNALISEES (parametres) ============
+
+export type CustomCommandInputType = "text" | "textarea" | "number" | "select" | "boolean"
+
+export type CustomCommandInput = {
+  key: string // identifiant unique (accessible dans le Lua via inputs.nomCle)
+  label: string // libelle affiche dans le formulaire
+  type: CustomCommandInputType
+  placeholder?: string
+  defaultValue?: string
+  required?: boolean
+  min?: number
+  max?: number
+  options?: { value: string; label: string }[] // pour type "select"
+  hint?: string
+}
+
+export type CustomCommandCategory = "player" | "world"
+
+export type CustomCommand = {
+  id: string
+  name: string
+  description: string
+  icon: string // nom d'une icone lucide (voir lib/icon-map.ts)
+  color: string // primary | cyan | green | yellow | orange | red | pink | purple
+  category: CustomCommandCategory
+  orderIndex: number
+  inputs: CustomCommandInput[]
+  luaCode: string
+  enabled: boolean
+  confirmRequired: boolean
+  createdAt: number
   updatedAt: number
 }
 

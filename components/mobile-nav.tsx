@@ -9,6 +9,7 @@ import {
   Terminal,
   Zap,
   FileCode,
+  Settings,
 } from "lucide-react"
 import type { ViewKey } from "./skydrive-sidebar"
 
@@ -20,6 +21,7 @@ const items: { key: ViewKey; label: string; icon: React.ElementType }[] = [
   { key: "executor", label: "Lua", icon: Terminal },
   { key: "triggers", label: "Triggers", icon: Zap },
   { key: "integration", label: "Script", icon: FileCode },
+  { key: "settings", label: "Custom", icon: Settings },
 ]
 
 export function MobileNav({

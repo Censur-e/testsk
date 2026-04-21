@@ -11,6 +11,7 @@ import { EconomyView } from "@/components/views/economy-view"
 import { ExecutorView } from "@/components/views/executor-view"
 import { TriggersView } from "@/components/views/triggers-view"
 import { IntegrationView } from "@/components/views/integration-view"
+import { SettingsView } from "@/components/views/settings-view"
 import { MobileNav } from "@/components/mobile-nav"
 
 export default function Page() {
@@ -35,6 +36,7 @@ export default function Page() {
             {view === "executor" && <ExecutorView />}
             {view === "triggers" && <TriggersView />}
             {view === "integration" && <IntegrationView />}
+            {view === "settings" && <SettingsView />}
           </div>
         </div>
       </div>

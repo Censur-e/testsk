@@ -23,6 +23,9 @@ import type {
   BanRecord,
   EconomyEntry,
   ServerStats,
+  CustomCommand,
+  CustomCommandInput,
+  CustomCommandCategory,
 } from "./types"
 
 const LOG_MAX = 500
@@ -554,6 +557,125 @@ export async function setStats(s: ServerStats) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", 1)
+}
+
+// ============ CUSTOM COMMANDS ============
+
+function rowToCustom(r: Record<string, unknown>): CustomCommand {
+  return {
+    id: String(r.id),
+    name: String(r.name),
+    description: String(r.description ?? ""),
+    icon: String(r.icon ?? "zap"),
+    color: String(r.color ?? "primary"),
+    category: (r.category as CustomCommandCategory) ?? "player",
+    orderIndex: Number(r.order_index ?? 0),
+    inputs: Array.isArray(r.inputs) ? (r.inputs as CustomCommandInput[]) : [],
+    luaCode: String(r.lua_code ?? ""),
+    enabled: Boolean(r.enabled ?? true),
+    confirmRequired: Boolean(r.confirm_required ?? false),
+    createdAt: r.created_at ? new Date(r.created_at as string).getTime() : Date.now(),
+    updatedAt: r.updated_at ? new Date(r.updated_at as string).getTime() : Date.now(),
+  }
+}
+
+export async function listCustomCommands(category?: CustomCommandCategory): Promise<CustomCommand[]> {
+  const sb = supabaseAdmin()
+  let q = sb.from("custom_commands").select("*").order("order_index", { ascending: true })
+  if (category) q = q.eq("category", category)
+  const { data } = await q
+  return (data ?? []).map(rowToCustom)
+}
+
+export async function getCustomCommand(id: string): Promise<CustomCommand | undefined> {
+  const sb = supabaseAdmin()
+  const { data } = await sb.from("custom_commands").select("*").eq("id", id).maybeSingle()
+  return data ? rowToCustom(data) : undefined
+}
+
+export async function createCustomCommand(
+  data: Omit<CustomCommand, "id" | "createdAt" | "updatedAt" | "orderIndex"> & {
+    orderIndex?: number
+  },
+): Promise<CustomCommand> {
+  const sb = supabaseAdmin()
+
+  // Place a la fin par defaut
+  let orderIndex = data.orderIndex
+  if (orderIndex === undefined) {
+    const { data: last } = await sb
+      .from("custom_commands")
+      .select("order_index")
+      .eq("category", data.category)
+      .order("order_index", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    orderIndex = (last?.order_index ?? -1) + 1
+  }
+
+  const { data: row, error } = await sb
+    .from("custom_commands")
+    .insert({
+      name: data.name,
+      description: data.description,
+      icon: data.icon,
+      color: data.color,
+      category: data.category,
+      order_index: orderIndex,
+      inputs: data.inputs,
+      lua_code: data.luaCode,
+      enabled: data.enabled,
+      confirm_required: data.confirmRequired,
+    })
+    .select()
+    .single()
+  if (error || !row) throw new Error(error?.message ?? "insert failed")
+  return rowToCustom(row)
+}
+
+export async function updateCustomCommand(
+  id: string,
+  patch: Partial<CustomCommand>,
+): Promise<CustomCommand | undefined> {
+  const sb = supabaseAdmin()
+  const snake: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (patch.name !== undefined) snake.name = patch.name
+  if (patch.description !== undefined) snake.description = patch.description
+  if (patch.icon !== undefined) snake.icon = patch.icon
+  if (patch.color !== undefined) snake.color = patch.color
+  if (patch.category !== undefined) snake.category = patch.category
+  if (patch.orderIndex !== undefined) snake.order_index = patch.orderIndex
+  if (patch.inputs !== undefined) snake.inputs = patch.inputs
+  if (patch.luaCode !== undefined) snake.lua_code = patch.luaCode
+  if (patch.enabled !== undefined) snake.enabled = patch.enabled
+  if (patch.confirmRequired !== undefined) snake.confirm_required = patch.confirmRequired
+  const { data, error } = await sb
+    .from("custom_commands")
+    .update(snake)
+    .eq("id", id)
+    .select()
+    .maybeSingle()
+  if (error || !data) return undefined
+  return rowToCustom(data)
+}
+
+export async function deleteCustomCommand(id: string): Promise<boolean> {
+  const sb = supabaseAdmin()
+  const { error } = await sb.from("custom_commands").delete().eq("id", id)
+  return !error
+}
+
+export async function reorderCustomCommands(
+  category: CustomCommandCategory,
+  orderedIds: string[],
+) {
+  const sb = supabaseAdmin()
+  // Applique les index dans l'ordre recu
+  await Promise.all(
+    orderedIds.map((id, idx) =>
+      sb.from("custom_commands").update({ order_index: idx }).eq("id", id).eq("category", category),
+    ),
+  )
 }
 
 export async function getStats(): Promise<ServerStats | null> {
