@@ -11,6 +11,8 @@ import type {
   ServerStats,
   CommandKind,
   Command,
+  CustomCommand,
+  CustomCommandCategory,
 } from "./types"
 
 const fetcher = async (url: string) => {
@@ -162,6 +164,86 @@ export async function adjustMoney(userId: string, username: string, delta: numbe
   if (!res.ok) throw new Error("Echec de transfert")
   globalMutate("/api/economy")
   return res.json()
+}
+
+// ============ CUSTOM COMMANDS ============
+export function useCustomCommands(category?: CustomCommandCategory) {
+  const url = category ? `/api/custom-commands?category=${category}` : "/api/custom-commands"
+  const { data, error, isLoading, mutate } = useSWR<{ commands: CustomCommand[] }>(
+    url,
+    fetcher,
+    { refreshInterval: 10_000 },
+  )
+  return { commands: data?.commands ?? [], isLoading, error, mutate }
+}
+
+export async function createCustomCommand(
+  data: Omit<CustomCommand, "id" | "createdAt" | "updatedAt" | "orderIndex">,
+) {
+  const res = await fetch("/api/custom-commands", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) throw new Error("Echec creation")
+  globalMutate("/api/custom-commands")
+  globalMutate(`/api/custom-commands?category=${data.category}`)
+  return res.json() as Promise<{ ok: boolean; command: CustomCommand }>
+}
+
+export async function updateCustomCommand(id: string, patch: Partial<CustomCommand>) {
+  const res = await fetch(`/api/custom-commands/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  })
+  if (!res.ok) throw new Error("Echec mise a jour")
+  globalMutate("/api/custom-commands")
+  if (patch.category) globalMutate(`/api/custom-commands?category=${patch.category}`)
+  globalMutate("/api/custom-commands?category=player")
+  globalMutate("/api/custom-commands?category=world")
+  return res.json()
+}
+
+export async function deleteCustomCommand(id: string) {
+  const res = await fetch(`/api/custom-commands/${id}`, { method: "DELETE" })
+  if (!res.ok) throw new Error("Echec suppression")
+  globalMutate("/api/custom-commands")
+  globalMutate("/api/custom-commands?category=player")
+  globalMutate("/api/custom-commands?category=world")
+  return res.json()
+}
+
+export async function reorderCustomCommands(
+  category: CustomCommandCategory,
+  orderedIds: string[],
+) {
+  const res = await fetch("/api/custom-commands/reorder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ category, orderedIds }),
+  })
+  if (!res.ok) throw new Error("Echec reorder")
+  globalMutate(`/api/custom-commands?category=${category}`)
+  return res.json()
+}
+
+/** Execute une commande perso en envoyant le code Lua + inputs dans la payload */
+export async function runCustomCommand(
+  cmd: CustomCommand,
+  inputs: Record<string, string>,
+  targetId?: string,
+) {
+  return sendCommand("custom", {
+    targetId,
+    payload: {
+      commandId: cmd.id,
+      commandName: cmd.name,
+      luaCode: cmd.luaCode,
+      inputs,
+    },
+    issuedBy: "Panel",
+  })
 }
 
 export async function banPlayer(

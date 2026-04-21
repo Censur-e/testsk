@@ -455,6 +455,121 @@ commandHandlers.spectate = function(_cmd)
     return true
 end
 
+--===================== COMMANDES PERSONNALISEES =====================
+-- Les commandes "custom" sont definies dans le panel (Parametres) et
+-- envoyees avec leur code Luau dans le payload. Elles s'executent dans
+-- un environnement sandbox avec acces aux APIs Roblox standard.
+--
+-- Payload recu :
+--   {
+--     commandId   = "uuid",
+--     commandName = "Nom lisible",
+--     luaCode     = "<code Luau>",
+--     inputs      = { key1 = "value1", key2 = "value2", ... }
+--   }
+--
+-- Variables injectees dans le sandbox :
+--   player       : Player cible (nil pour une commande Monde)
+--   inputs       : table des valeurs du formulaire
+--   log(t,m)     : helper qui envoie un log vers le panel
+--
+-- Globals autorises : game, workspace, script, Players, Lighting, Chat,
+--                     HttpService, TeleportService, Stats, CFrame, Vector3,
+--                     Enum, Color3, Instance, task, wait, tick, os, math,
+--                     string, table, pcall, ipairs, pairs, tonumber, tostring,
+--                     typeof, print, warn, error
+
+commandHandlers.custom = function(cmd)
+    local payload = cmd.payload or {}
+    local luaCode = payload.luaCode
+    local commandName = payload.commandName or "(sans nom)"
+
+    if type(luaCode) ~= "string" or luaCode == "" then
+        return false, "Code Luau manquant"
+    end
+
+    -- Resout la cible (optionnel)
+    local targetPlayer = nil
+    if cmd.targetId and cmd.targetId ~= "" and cmd.targetId ~= "*" then
+        local uid = tonumber(cmd.targetId)
+        if uid then
+            targetPlayer = Players:GetPlayerByUserId(uid)
+        end
+    end
+
+    -- Environnement sandbox : les whitelists limitent ce que l'utilisateur peut casser.
+    local env = {
+        -- Valeurs injectees
+        player  = targetPlayer,
+        inputs  = payload.inputs or {},
+        log     = function(t, m)
+            log(tostring(t or "info"), tostring(m or ""))
+        end,
+
+        -- Globals standards
+        game       = game,
+        workspace  = workspace,
+        script     = script,
+        task       = task,
+        wait       = wait,
+        tick       = tick,
+        os         = os,
+        math       = math,
+        string     = string,
+        table      = table,
+        pcall      = pcall,
+        ipairs     = ipairs,
+        pairs      = pairs,
+        tonumber   = tonumber,
+        tostring   = tostring,
+        typeof     = typeof,
+        print      = print,
+        warn       = warn,
+        error      = error,
+        select     = select,
+        unpack     = unpack,
+
+        -- Types Roblox
+        CFrame   = CFrame,
+        Vector3  = Vector3,
+        Vector2  = Vector2,
+        Color3   = Color3,
+        Enum     = Enum,
+        Instance = Instance,
+        Ray      = Ray,
+        UDim     = UDim,
+        UDim2    = UDim2,
+
+        -- Services pre-resolus pour faciliter l'ecriture
+        Players         = Players,
+        Lighting        = Lighting,
+        Chat            = Chat,
+        HttpService     = HttpService,
+        TeleportService = TeleportService,
+        Stats           = Stats,
+        RunService      = RunService,
+    }
+
+    -- loadstring requiert LoadStringEnabled = TRUE dans Game Settings
+    local fn, compileErr = loadstring(luaCode)
+    if not fn then
+        log("error", string.format("[Custom] %s - Compile : %s", commandName, tostring(compileErr)))
+        return false, "Compile: " .. tostring(compileErr)
+    end
+
+    -- setfenv existe dans Luau Roblox
+    pcall(setfenv, fn, env)
+
+    local ok, runtimeErr = pcall(fn)
+    if not ok then
+        log("error", string.format("[Custom] %s - Runtime : %s", commandName, tostring(runtimeErr)))
+        return false, "Runtime: " .. tostring(runtimeErr)
+    end
+
+    log("success", string.format("[Custom] %s executee", commandName))
+    return true
+end
+
 --===================== BOUCLE HEARTBEAT =====================
 
 local function doHeartbeat()

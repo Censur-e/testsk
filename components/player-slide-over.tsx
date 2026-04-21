@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react"
 import type { Player, CommandKind } from "@/lib/types"
-import { banPlayer, sendCommand, adjustMoney } from "@/lib/api"
+import { banPlayer, sendCommand, adjustMoney, useCustomCommands } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { PromptDialog, type PromptField } from "@/components/prompt-dialog"
+import { CustomCommandButton } from "@/components/custom-command-button"
 import {
   X,
   MapPin,
@@ -455,6 +456,8 @@ export function PlayerSlideOver({ player, allPlayers = [], onClose }: Props) {
   const [sending, setSending] = useState<string | null>(null)
   const [promptKey, setPromptKey] = useState<string | null>(null)
   const [removingItem, setRemovingItem] = useState<string | null>(null)
+  const { commands: customCmds } = useCustomCommands("player")
+  const enabledCustom = customCmds.filter((c) => c.enabled)
 
   useEffect(() => {
     if (player) setMounted(true)
@@ -730,6 +733,32 @@ export function PlayerSlideOver({ player, allPlayers = [], onClose }: Props) {
                       })}
                     </div>
                   </div>
+
+                  {/* Custom commands */}
+                  {enabledCustom.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
+                          <Sparkles className="h-3 w-3 text-primary" />
+                          Commandes personnalisees
+                        </div>
+                        <span className="text-[10px] font-mono bg-white/[0.05] border border-white/10 rounded-md px-1.5 py-0.5 text-muted-foreground">
+                          {enabledCustom.length}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2">
+                        {enabledCustom.map((c) => (
+                          <CustomCommandButton
+                            key={c.id}
+                            command={c}
+                            targetId={player.id}
+                            targetLabel={player.username}
+                            variant="grid"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Advanced actions */}
                   <div>

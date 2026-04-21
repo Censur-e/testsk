@@ -4,8 +4,9 @@ import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import type { WorldState } from "@/lib/types"
-import { patchWorld, sendCommand, useWorld } from "@/lib/api"
+import { patchWorld, sendCommand, useWorld, useCustomCommands } from "@/lib/api"
 import { PromptDialog, type PromptField } from "@/components/prompt-dialog"
+import { CustomCommandButton } from "@/components/custom-command-button"
 import {
   Gauge,
   ArrowUpFromLine,
@@ -56,6 +57,8 @@ type PromptConf = {
 
 export function WorldControlView() {
   const { world, isLoading } = useWorld()
+  const { commands: customCmds } = useCustomCommands("world")
+  const enabledCustom = customCmds.filter((c) => c.enabled)
   // Etat local pour sliders (optimistic). Sync quand le world arrive.
   const [local, setLocal] = useState<WorldState>(DEFAULTS)
   const [promptKey, setPromptKey] = useState<string | null>(null)
@@ -524,6 +527,32 @@ export function WorldControlView() {
           />
         </div>
       </div>
+
+      {/* Custom world commands */}
+      {enabledCustom.length > 0 && (
+        <div className="glass rounded-2xl p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+              <Sparkles className="h-4 w-4 text-white" />
+            </div>
+            <div className="flex-1">
+              <h2 className="font-medium">Commandes personnalisees</h2>
+              <p className="text-xs text-muted-foreground">
+                Tes commandes Monde definies dans les Parametres
+              </p>
+            </div>
+            <span className="text-[10px] font-mono bg-white/[0.05] border border-white/10 rounded-md px-1.5 py-0.5 text-muted-foreground">
+              {enabledCustom.length}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {enabledCustom.map((c) => (
+              <CustomCommandButton key={c.id} command={c} variant="grid" />
+            ))}
+          </div>
+        </div>
+      )}
 
       {activePrompt && (
         <PromptDialog
