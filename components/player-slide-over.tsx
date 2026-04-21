@@ -90,9 +90,9 @@ type AdvancedActionPrompt = {
 type AdvancedAction = AdvancedActionStatic | AdvancedActionPrompt
 
 const advancedActions: AdvancedAction[] = [
-  { kind: "static", key: "tp-me", label: "Teleporter a moi", icon: Radio, commandKind: "teleport_to_me" },
+  //{ kind: "static", key: "tp-me", label: "Teleporter a moi", icon: Radio, commandKind: "teleport_to_me" },
   { kind: "prompt", key: "tp-to-player", label: "Teleporter vers un joueur", icon: Target, promptKey: "tp-player" },
-  { kind: "static", key: "refill", label: "Recharger les munitions", icon: Zap, commandKind: "refill_ammo" },
+  //{ kind: "static", key: "refill", label: "Recharger les munitions", icon: Zap, commandKind: "refill_ammo" },
   { kind: "static", key: "reset", label: "Reset du personnage", icon: RotateCcw, commandKind: "reset_character" },
   { kind: "prompt", key: "give-money", label: "Donner de l'argent", icon: DollarSign, promptKey: "money" },
   { kind: "prompt", key: "set-role", label: "Changer le role", icon: Crown, promptKey: "role" },
@@ -101,7 +101,7 @@ const advancedActions: AdvancedAction[] = [
   { kind: "prompt", key: "private-msg", label: "Message prive", icon: Mail, promptKey: "pm" },
   { kind: "prompt", key: "set-hp", label: "Definir la sante", icon: Heart, promptKey: "hp" },
   { kind: "prompt", key: "give-item", label: "Donner un objet", icon: Gift, promptKey: "give-item" },
-  { kind: "static", key: "clone", label: "Cloner le joueur", icon: Copy, commandKind: "clone" },
+  //{ kind: "static", key: "clone", label: "Cloner le joueur", icon: Copy, commandKind: "clone" },
   { kind: "static", key: "wipe", label: "Vider l'inventaire", icon: Trash2, commandKind: "wipe_inventory" },
 ]
 
