@@ -45,7 +45,71 @@ import {
   FormInput,
   Palette,
   Sparkles,
+  Database,
+  ShieldAlert,
+  RefreshCw,
+  CheckCircle2,
+  XCircle,
+  Clock,
 } from "lucide-react"
+import useSWR from "swr"
+
+type DbTableStats = {
+  table: string
+  label: string
+  count: number
+  oldest?: string
+}
+
+const DB_CLEANUP_DEFAULTS = {
+  logs: 7,
+  command_queue: 3,
+  live_players: 10,
+  economy_transactions: 30,
+}
+
+const DB_TABLE_META: Record<
+  string,
+  { label: string; unit: string; hint: string; min: number; max: number; danger?: boolean }
+> = {
+  logs: {
+    label: "Logs console",
+    unit: "jours",
+    hint: "Supprime les logs plus vieux que X jours",
+    min: 1,
+    max: 365,
+  },
+  command_queue: {
+    label: "File de commandes",
+    unit: "jours",
+    hint: "Supprime les commandes terminees plus vieilles que X jours (les en-attente ne sont jamais supprimees)",
+    min: 1,
+    max: 90,
+  },
+  live_players: {
+    label: "Joueurs en ligne",
+    unit: "minutes",
+    hint: "Supprime les joueurs dont le dernier heartbeat date de plus de X minutes",
+    min: 1,
+    max: 1440,
+    danger: false,
+  },
+  economy_transactions: {
+    label: "Transactions economie",
+    unit: "jours",
+    hint: "Supprime les transactions anterieures a X jours",
+    min: 1,
+    max: 3650,
+  },
+}
+
+type CleanupRunResult = { table: string; deleted: number; error?: string }
+
+function formatDate(iso?: string) {
+  if (!iso) return "—"
+  const d = new Date(iso)
+  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })
+}
 
 const EMPTY_COMMAND = (category: CustomCommandCategory): CustomCommand => ({
   id: "",
@@ -64,7 +128,8 @@ const EMPTY_COMMAND = (category: CustomCommandCategory): CustomCommand => ({
 })
 
 export function SettingsView() {
-  const [tab, setTab] = useState<CustomCommandCategory>("player")
+  const [mainTab, setMainTab] = useState<"player" | "world" | "db">("player")
+  const tab = mainTab === "db" ? "player" : mainTab
   const { commands, isLoading, mutate } = useCustomCommands(tab)
   const [editing, setEditing] = useState<CustomCommand | null>(null)
 
@@ -143,45 +208,55 @@ export function SettingsView() {
             Luau directement dans Roblox.
           </p>
         </div>
-        <button
-          onClick={() => setEditing(EMPTY_COMMAND(tab))}
-          className="flex items-center gap-2 bg-gradient-to-r from-primary to-accent hover:brightness-110 px-4 py-2 rounded-xl text-sm font-medium text-white transition-all glow-primary"
-        >
-          <Plus className="h-4 w-4" />
-          Nouvelle commande
-        </button>
+        {mainTab !== "db" && (
+          <button
+            onClick={() => setEditing(EMPTY_COMMAND(tab))}
+            className="flex items-center gap-2 bg-gradient-to-r from-primary to-accent hover:brightness-110 px-4 py-2 rounded-xl text-sm font-medium text-white transition-all glow-primary"
+          >
+            <Plus className="h-4 w-4" />
+            Nouvelle commande
+          </button>
+        )}
       </div>
 
       {/* How it works */}
-      <div className="glass-subtle rounded-2xl p-4 flex items-start gap-3 border border-white/5">
-        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-500/30 to-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-          <Info className="h-4 w-4 text-cyan-300" />
+      {mainTab !== "db" && (
+        <div className="glass-subtle rounded-2xl p-4 flex items-start gap-3 border border-white/5">
+          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-500/30 to-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <Info className="h-4 w-4 text-cyan-300" />
+          </div>
+          <div className="text-xs leading-relaxed text-muted-foreground">
+            <span className="text-foreground font-medium">Comment ca marche :</span> chaque commande
+            contient du code Luau execute cote serveur Roblox. Les{" "}
+            <span className="text-foreground">inputs</span> deviennent des champs de formulaire dans
+            le panel et sont accessibles dans le code via{" "}
+            <code className="text-primary">inputs.nomDuChamp</code>. Les commandes{" "}
+            <span className="text-foreground">Joueurs</span> apparaissent dans la fiche d&apos;un
+            joueur, celles <span className="text-foreground">Monde</span> dans Controle du Monde.
+          </div>
         </div>
-        <div className="text-xs leading-relaxed text-muted-foreground">
-          <span className="text-foreground font-medium">Comment ca marche :</span> chaque commande
-          contient du code Luau execute cote serveur Roblox. Les{" "}
-          <span className="text-foreground">inputs</span> deviennent des champs de formulaire dans
-          le panel et sont accessibles dans le code via{" "}
-          <code className="text-primary">inputs.nomDuChamp</code>. Les commandes{" "}
-          <span className="text-foreground">Joueurs</span> apparaissent dans la fiche d&apos;un
-          joueur, celles <span className="text-foreground">Monde</span> dans Controle du Monde.
-        </div>
-      </div>
+      )}
 
       {/* Tabs */}
       <div className="glass rounded-2xl p-1 flex items-center gap-1 w-fit">
-        <TabButton active={tab === "player"} onClick={() => setTab("player")} icon={Users}>
+        <TabButton active={mainTab === "player"} onClick={() => setMainTab("player")} icon={Users}>
           Commandes Joueurs
           <CountBadge count={commands.filter((c) => c.category === "player").length} />
         </TabButton>
-        <TabButton active={tab === "world"} onClick={() => setTab("world")} icon={Globe2}>
+        <TabButton active={mainTab === "world"} onClick={() => setMainTab("world")} icon={Globe2}>
           Commandes Monde
           <CountBadge count={commands.filter((c) => c.category === "world").length} />
         </TabButton>
+        <TabButton active={mainTab === "db"} onClick={() => setMainTab("db")} icon={Database}>
+          Base de donnees
+        </TabButton>
       </div>
 
-      {/* List */}
-      <div className="glass rounded-2xl p-4">
+      {/* DB Cleanup tab */}
+      {mainTab === "db" && <DbCleanupPanel />}
+
+      {/* List (commandes personnalisees) */}
+      {mainTab !== "db" && <div className="glass rounded-2xl p-4">
         {isLoading && displayed.length === 0 && (
           <div className="text-center py-10 text-sm text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
@@ -220,7 +295,7 @@ export function SettingsView() {
             />
           ))}
         </div>
-      </div>
+      </div>}
 
       {editing && (
         <CommandEditor
@@ -231,6 +306,240 @@ export function SettingsView() {
             setEditing(null)
           }}
         />
+      )}
+    </div>
+  )
+}
+
+// ============ DB CLEANUP PANEL ============
+
+function DbCleanupPanel() {
+  const { data, isLoading: statsLoading, mutate: refreshStats } = useSWR<{
+    ok: boolean
+    stats: DbTableStats[]
+  }>("/api/cleanup", (url: string) => fetch(url).then((r) => r.json()), { revalidateOnFocus: false })
+
+  const stats = data?.stats ?? []
+
+  const [config, setConfig] = useState<Record<string, number>>(DB_CLEANUP_DEFAULTS)
+  const [running, setRunning] = useState(false)
+  const [results, setResults] = useState<CleanupRunResult[] | null>(null)
+  const [totalDeleted, setTotalDeleted] = useState<number | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+
+  const handleRun = async () => {
+    setRunning(true)
+    setResults(null)
+    setTotalDeleted(null)
+    try {
+      const res = await fetch("/api/cleanup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config),
+      })
+      const json = await res.json()
+      if (!json.ok) throw new Error(json.error ?? "Erreur inconnue")
+      setResults(json.results)
+      setTotalDeleted(json.totalDeleted)
+      toast.success(`${json.totalDeleted} ligne(s) supprimee(s)`)
+      refreshStats()
+    } catch (e) {
+      toast.error(`Echec nettoyage : ${e}`)
+    } finally {
+      setRunning(false)
+      setConfirmOpen(false)
+    }
+  }
+
+  const totalRows = stats.reduce((s, t) => s + t.count, 0)
+
+  return (
+    <div className="space-y-4">
+      {/* Stats overview */}
+      <div className="glass rounded-2xl p-6">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-cyan-500/20 to-primary/15 border border-white/10 flex items-center justify-center">
+              <Database className="h-5 w-5 text-cyan-400" />
+            </div>
+            <div>
+              <h2 className="font-medium text-sm">Etat de la base de donnees</h2>
+              <p className="text-xs text-muted-foreground">
+                Lignes totales dans les tables nettoyables
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-bold tabular-nums">
+              {statsLoading ? "—" : totalRows.toLocaleString("fr-FR")}
+            </span>
+            <button
+              onClick={() => refreshStats()}
+              className="p-1.5 rounded-lg hover:bg-white/5 transition-colors text-muted-foreground"
+              title="Actualiser"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", statsLoading && "animate-spin")} />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {(statsLoading ? (["logs","command_queue","live_players","economy_transactions"] as const) : stats.map(s=>s.table)).map((key) => {
+            const s = stats.find((x) => x.table === key)
+            const meta = DB_TABLE_META[key]
+            return (
+              <div key={key} className="glass-subtle rounded-xl p-3 border border-white/[0.06]">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 font-medium">
+                  {meta?.label ?? key}
+                </div>
+                <div className="text-xl font-bold tabular-nums">
+                  {statsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : (s?.count ?? 0).toLocaleString("fr-FR")}
+                </div>
+                {s?.oldest && (
+                  <div className="text-[10px] text-muted-foreground/70 mt-1 flex items-center gap-1">
+                    <Clock className="h-2.5 w-2.5" />
+                    depuis {formatDate(s.oldest)}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Config */}
+      <div className="glass rounded-2xl p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <ShieldAlert className="h-4 w-4 text-yellow-400" />
+          <h2 className="font-medium text-sm">Regles de retention</h2>
+        </div>
+        <p className="text-xs text-muted-foreground mb-5">
+          Configure la duree de conservation de chaque type de donnee. Les lignes plus anciennes seront supprimees lors du nettoyage.
+        </p>
+
+        <div className="space-y-4">
+          {(Object.keys(DB_TABLE_META) as Array<keyof typeof DB_TABLE_META>).map((key) => {
+            const meta = DB_TABLE_META[key]
+            const val = config[key] ?? DB_CLEANUP_DEFAULTS[key as keyof typeof DB_CLEANUP_DEFAULTS]
+            return (
+              <div key={key} className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{meta.label}</span>
+                    {meta.danger && (
+                      <span className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 rounded px-1.5 py-0.5">
+                        Irreversible
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{meta.hint}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <input
+                    type="range"
+                    min={meta.min}
+                    max={meta.max}
+                    value={val}
+                    onChange={(e) => setConfig((c) => ({ ...c, [key]: Number(e.target.value) }))}
+                    className="w-28 accent-primary"
+                  />
+                  <div className="flex items-center gap-1.5 glass-subtle rounded-lg px-3 py-1.5 w-28 border border-white/10">
+                    <input
+                      type="number"
+                      min={meta.min}
+                      max={meta.max}
+                      value={val}
+                      onChange={(e) => {
+                        const n = Math.max(meta.min, Math.min(meta.max, Number(e.target.value)))
+                        setConfig((c) => ({ ...c, [key]: n }))
+                      }}
+                      className="w-12 bg-transparent text-sm font-mono text-right focus:outline-none tabular-nums"
+                    />
+                    <span className="text-[11px] text-muted-foreground shrink-0">{meta.unit}</span>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Results */}
+      {results && (
+        <div className="glass rounded-2xl p-5 border border-white/[0.08]">
+          <div className="flex items-center gap-2 mb-3">
+            <CheckCircle2 className="h-4 w-4 text-green-400" />
+            <span className="text-sm font-medium">
+              Nettoyage termine — {totalDeleted} ligne(s) supprimee(s)
+            </span>
+          </div>
+          <div className="space-y-1">
+            {results.map((r) => (
+              <div
+                key={r.table}
+                className="flex items-center justify-between text-xs py-1 border-b border-white/[0.04] last:border-0"
+              >
+                <div className="flex items-center gap-2">
+                  {r.error ? (
+                    <XCircle className="h-3 w-3 text-red-400" />
+                  ) : (
+                    <CheckCircle2 className="h-3 w-3 text-green-400" />
+                  )}
+                  <span className="text-muted-foreground">
+                    {DB_TABLE_META[r.table]?.label ?? r.table}
+                  </span>
+                  {r.error && <span className="text-red-400 text-[10px]">{r.error}</span>}
+                </div>
+                <span className="font-mono tabular-nums">
+                  {r.deleted > 0 ? (
+                    <span className="text-green-400">-{r.deleted}</span>
+                  ) : (
+                    <span className="text-muted-foreground/50">0</span>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Action */}
+      {!confirmOpen ? (
+        <button
+          onClick={() => setConfirmOpen(true)}
+          disabled={running}
+          className="flex items-center gap-2 bg-gradient-to-r from-orange-500/80 to-red-500/80 hover:from-orange-500 hover:to-red-500 disabled:opacity-50 px-5 py-2.5 rounded-xl text-sm font-medium text-white transition-all"
+        >
+          <Trash2 className="h-4 w-4" />
+          Nettoyer la base de donnees
+        </button>
+      ) : (
+        <div className="glass rounded-2xl p-4 border border-red-500/20 space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-red-300">
+            <ShieldAlert className="h-4 w-4" />
+            Confirmer le nettoyage ?
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Cette action est <strong className="text-foreground">irreversible</strong>. Les lignes
+            correspondant aux regles de retention ci-dessus seront definitivement supprimees.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={handleRun}
+              disabled={running}
+              className="flex items-center gap-2 bg-red-500 hover:bg-red-400 disabled:opacity-50 px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors"
+            >
+              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              {running ? "Nettoyage..." : "Oui, supprimer"}
+            </button>
+            <button
+              onClick={() => setConfirmOpen(false)}
+              className="px-4 py-2 rounded-lg text-sm glass-subtle hover:bg-white/[0.06] transition-colors"
+            >
+              Annuler
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )

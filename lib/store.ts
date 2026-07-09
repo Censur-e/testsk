@@ -678,6 +678,130 @@ export async function reorderCustomCommands(
   )
 }
 
+// ============ NETTOYAGE BASE DE DONNEES ============
+
+export type CleanupTableKey = "logs" | "command_queue" | "live_players" | "economy_transactions"
+
+export type CleanupConfig = {
+  /** Retention en jours (0 = tout supprimer) */
+  logs: number
+  /** Retention en jours des commandes ackees (0 = tout supprimer) */
+  command_queue: number
+  /** Supprime les joueurs absents depuis plus de X minutes */
+  live_players: number
+  /** Retention en jours des transactions (0 = tout supprimer) */
+  economy_transactions: number
+}
+
+export type CleanupResult = {
+  table: CleanupTableKey
+  deleted: number
+  error?: string
+}
+
+export type DbTableStats = {
+  table: CleanupTableKey
+  label: string
+  count: number
+  oldest?: string // ISO date de la plus ancienne ligne
+}
+
+/** Compte les lignes de chaque table nettoyable + date de la plus ancienne */
+export async function getDbStats(): Promise<DbTableStats[]> {
+  const sb = supabaseAdmin()
+
+  const [logs, cmds, players, txs] = await Promise.all([
+    sb.from("logs").select("id, created_at", { count: "exact" }).order("created_at", { ascending: true }).limit(1),
+    sb.from("command_queue").select("id, created_at", { count: "exact" }).order("created_at", { ascending: true }).limit(1),
+    sb.from("live_players").select("id, last_seen", { count: "exact" }).order("last_seen", { ascending: true }).limit(1),
+    sb.from("economy_transactions").select("id, created_at", { count: "exact" }).order("created_at", { ascending: true }).limit(1),
+  ])
+
+  return [
+    {
+      table: "logs",
+      label: "Logs console",
+      count: logs.count ?? 0,
+      oldest: logs.data?.[0]?.created_at ?? undefined,
+    },
+    {
+      table: "command_queue",
+      label: "File de commandes",
+      count: cmds.count ?? 0,
+      oldest: cmds.data?.[0]?.created_at ?? undefined,
+    },
+    {
+      table: "live_players",
+      label: "Joueurs en ligne",
+      count: players.count ?? 0,
+      oldest: players.data?.[0]?.last_seen ?? undefined,
+    },
+    {
+      table: "economy_transactions",
+      label: "Transactions economie",
+      count: txs.count ?? 0,
+      oldest: txs.data?.[0]?.created_at ?? undefined,
+    },
+  ]
+}
+
+/** Purge les lignes selon la config de retention. Retourne le nombre de lignes supprimees par table. */
+export async function runCleanup(config: CleanupConfig): Promise<CleanupResult[]> {
+  const sb = supabaseAdmin()
+  const results: CleanupResult[] = []
+
+  // --- logs ---
+  try {
+    const cutoff = new Date(Date.now() - config.logs * 24 * 60 * 60 * 1000).toISOString()
+    const { count, error } = await sb
+      .from("logs")
+      .delete({ count: "exact" })
+      .lt("created_at", cutoff)
+    results.push({ table: "logs", deleted: count ?? 0, error: error?.message })
+  } catch (e) {
+    results.push({ table: "logs", deleted: 0, error: String(e) })
+  }
+
+  // --- command_queue : seulement les commandes ackees (status != pending) ---
+  try {
+    const cutoff = new Date(Date.now() - config.command_queue * 24 * 60 * 60 * 1000).toISOString()
+    const { count, error } = await sb
+      .from("command_queue")
+      .delete({ count: "exact" })
+      .neq("status", "pending")
+      .lt("created_at", cutoff)
+    results.push({ table: "command_queue", deleted: count ?? 0, error: error?.message })
+  } catch (e) {
+    results.push({ table: "command_queue", deleted: 0, error: String(e) })
+  }
+
+  // --- live_players : joueurs absents depuis X minutes ---
+  try {
+    const cutoff = new Date(Date.now() - config.live_players * 60 * 1000).toISOString()
+    const { count, error } = await sb
+      .from("live_players")
+      .delete({ count: "exact" })
+      .lt("last_seen", cutoff)
+    results.push({ table: "live_players", deleted: count ?? 0, error: error?.message })
+  } catch (e) {
+    results.push({ table: "live_players", deleted: 0, error: String(e) })
+  }
+
+  // --- economy_transactions ---
+  try {
+    const cutoff = new Date(Date.now() - config.economy_transactions * 24 * 60 * 60 * 1000).toISOString()
+    const { count, error } = await sb
+      .from("economy_transactions")
+      .delete({ count: "exact" })
+      .lt("created_at", cutoff)
+    results.push({ table: "economy_transactions", deleted: count ?? 0, error: error?.message })
+  } catch (e) {
+    results.push({ table: "economy_transactions", deleted: 0, error: String(e) })
+  }
+
+  return results
+}
+
 export async function getStats(): Promise<ServerStats | null> {
   const sb = supabaseAdmin()
   const { data } = await sb.from("server_state").select("*").eq("id", 1).maybeSingle()
